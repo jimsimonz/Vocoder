@@ -1,0 +1,72 @@
+# Publishes the module on every push to main: test, build, check Controllerist can load it, then
+# push the build to gh-pages (what `npm run publish:pages` does by hand).
+#
+# Needs two read-only deploy-key secrets (the engine and Controllerist repos are private):
+#   ENGINE_DEPLOY_KEY         private key whose public half is a deploy key on jimsimonz/AliveEngine
+#   CONTROLLERIST_DEPLOY_KEY  private key whose public half is a deploy key on jimsimonz/Controllerist
+# scripts/ci-keys.sh sets both up (run it once per module repo).
+name: Publish module
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write # push gh-pages
+
+concurrency:
+  group: publish
+  cancel-in-progress: true # only the newest main matters
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555 # v0.10.0, pinned: it handles the deploy keys
+        with:
+          ssh-private-key: |
+            ${{ secrets.ENGINE_DEPLOY_KEY }}
+            ${{ secrets.CONTROLLERIST_DEPLOY_KEY }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --legacy-peer-deps
+
+      - run: npm run check
+
+      - run: npm run build
+
+      - name: Controllerist accepts this module's contract
+        run: |
+          set -euo pipefail
+          tmp="$RUNNER_TEMP/contract"
+          git clone -q --depth 1 --filter=blob:none --sparse git@github.com:jimsimonz/Controllerist.git "$tmp/app"
+          git -C "$tmp/app" sparse-checkout set --no-cone /package-lock.json
+          sha=$(node -p 'require(process.argv[1]).packages["node_modules/alive-engine"].resolved.split("#")[1]' "$tmp/app/package-lock.json")
+          git clone -q --filter=blob:none --no-checkout git@github.com:jimsimonz/AliveEngine.git "$tmp/engine"
+          accepts=$(git -C "$tmp/engine" show "${sha}:src/core/moduleContract.json" | node -p 'JSON.parse(require("fs").readFileSync(0)).contract')
+          for f in dist/module/*.json; do
+            needs=$(node -p 'require(process.argv[1]).contract' "$PWD/$f")
+            echo "$f needs contract $needs; Controllerist (engine ${sha:0:7}) accepts up to $accepts"
+            if [ "$needs" -gt "$accepts" ]; then
+              echo "::error::$f needs contract $needs but Controllerist only accepts $accepts. Update Controllerist's engine first, then re-run this workflow."
+              exit 1
+            fi
+          done
+
+      - name: Publish to gh-pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The publish script pushes from a fresh repo, which doesn't get checkout's credentials,
+          # so it pushes to the origin URL with the job's token in it.
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git config user.name "Jim Simons"
+          git config user.email "${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com"
+          npm run publish:pages

@@ -1,0 +1,48 @@
+{
+  "name": "vocoder-module",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A 3D vocoder feature module for AliveEngine containers (Controllerist): a six-voice synth played from its keys, shaped live by the player's voice through the microphone (16 bands), with eight sounds in memory and an arpeggiator on the music clock.",
+  "author": "AliveIn Tech Ltd",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && vite build -c vite.module.config.ts",
+    "build:module": "vite build -c vite.module.config.ts",
+    "preview": "vite preview",
+    "publish:pages": "alive-module publish-pages",
+    "test": "vitest run",
+    "check": "tsc --noEmit -p . && vitest run",
+    "engine:update": "npm install alive-engine@git+https://github.com/jimsimonz/AliveEngine.git#main --legacy-peer-deps",
+    "controllerist": "alive-module controllerist",
+    "check:removal": "alive-module check"
+  },
+  "dependencies": {
+    "@iwsdk/core": "1.1.0",
+    "@pmndrs/uikit": "1.0.76",
+    "@react-three/uikit-horizon": "1.0.68",
+    "alive-engine": "github:jimsimonz/AliveEngine#main"
+  },
+  "devDependencies": {
+    "@iwsdk/vite-plugin-dev": "1.1.0",
+    "@types/node": "^22.14.0",
+    "@types/three": "^0.185.0",
+    "three": "npm:super-three@0.185.0",
+    "typescript": "^5.5.0",
+    "vite": "7.2.6",
+    "vite-plugin-mkcert": "^1.17.0",
+    "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "three": "npm:super-three@0.185.0",
+    "playwright": "1.60.0",
+    "playwright-core": "1.60.0",
+    "@pmndrs/uikit": "1.0.76",
+    "@pmndrs/uikit-horizon": "1.0.76",
+    "@pmndrs/uikit-lucide": "1.0.76",
+    "@react-three/uikit": "1.0.68"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}
