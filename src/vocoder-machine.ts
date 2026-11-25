@@ -124,6 +124,17 @@ export function createVocoderMachine(context: ModuleContext) {
     return holder.__controlleristVocoder;
   };
 
+  /**
+   * MIC ON is where it starts (a vocoder is for singing into): the microphone opens with the first
+   * touch of the instrument (a key, a button: the browser wants a press for sound and asks for the
+   * microphone the first time), and stays as the player left it next time (MIC ON pressed off is kept).
+   */
+  const micKey = context.storageKey("micOn");
+  let micWanted = (() => { try { return localStorage.getItem(micKey) !== "0"; } catch { return true; } })();
+  const keepMicWanted = (on: boolean) => { micWanted = on; try { localStorage.setItem(micKey, on ? "1" : "0"); } catch { /* not kept */ } };
+  /** A touch of the instrument: the microphone opens now if it is wanted and isn't yet. */
+  const micOnTouch = () => { if (micWanted && !mic && !opening && heardHere()) void openMic(); };
+
   const closeMic = () => {
     stopListening?.(); stopListening = null;
     mic?.close(); mic = null;
@@ -139,7 +150,7 @@ export function createVocoderMachine(context: ModuleContext) {
       const c = await ensureAudio();
       if (!c || !node) return;
       const m = await openMicrophone(c, { echoCancellation: true });
-      if (disposed) { m.close(); return; }
+      if (disposed || !micWanted) { m.close(); return; } // (turned off while it was opening)
       mic = m;
       // Live where the container has it (contract 14): the microphone's own node into the vocoder's
       // second input, with nothing between. Else its blocks, by port, stamped with their frame.
@@ -159,6 +170,7 @@ export function createVocoderMachine(context: ModuleContext) {
     } catch (e) {
       console.warn("[Vocoder] no microphone:", e);
       problem = "The microphone isn't available here. Allow it for this site and press MIC ON again.";
+      micWanted = false; // (not asked again at every touch; MIC ON tries again)
     } finally {
       opening = false;
       changed();
@@ -273,6 +285,7 @@ export function createVocoderMachine(context: ModuleContext) {
     }
     held.add(note);
     changed();
+    if (!scheduled) micOnTouch();
     if (scheduled || !(await ensureAudio())) return;
     if (pressOf.get(note) !== press) return; // a newer press of this note sounds instead
     if (arpOn()) updateArp();
@@ -378,7 +391,7 @@ export function createVocoderMachine(context: ModuleContext) {
     /** Is this button lit now? */
     lit: (buttonId: string): boolean => {
       const spec = buttonById(buttonId);
-      if (spec?.kind === "mic") return !!mic; // its own: the microphone is open
+      if (spec?.kind === "mic") return !!mic || (micWanted && heardHere() && !problem); // its own: open, or to open at the first touch
       if (spec?.kind === "arranger") return arrangerOn;
       return !!spec && buttonLit(spec, switches);
     },
@@ -392,7 +405,9 @@ export function createVocoderMachine(context: ModuleContext) {
         // This page's own microphone: never the room's (a guest's copy has none to give).
         if (!heardHere()) return false;
         problem = "";
-      if (mic) closeMic(); else void openMic();
+        // Lit (open, or to open at the first touch): off. Else on.
+        if (mic || (micWanted && !problem)) { keepMicWanted(false); closeMic(); }
+        else { keepMicWanted(true); void openMic(); }
         return true;
       }
       if (spec?.kind === "arranger") {
@@ -416,7 +431,7 @@ export function createVocoderMachine(context: ModuleContext) {
     setModWheel(v: number) { modWheel = Math.max(0, Math.min(1, v)); seq?.setParams({ modWheel }); },
 
     /** Make the audio ready (a press anywhere on the machine is a gesture). */
-    wake: () => { void ensureAudio(); },
+    wake: () => { void ensureAudio(); micOnTouch(); },
     /** The voice's share of the audio thread, as the engine measures it (null before any sound). */
     voiceLoad: (): unknown => (seq as unknown as { voiceLoad?: () => unknown } | null)?.voiceLoad?.() ?? null,
 

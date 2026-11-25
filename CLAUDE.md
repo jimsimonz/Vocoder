@@ -20,8 +20,9 @@ live by the player's voice through the microphone (the modulator). Made from the
   `src/vocoder.worklet.ts` (imported with `?worker&url`, one self-contained file that imports only `vocoder-dsp.ts`, loaded
   once per audio context). Its processor is registered under a name with a number (`controllerist-vocoder-2`): change the
   number when what it does changes, or a page with the old one loaded keeps it. Keep it near 1-2% of a desktop core (its test measures it).
-- The microphone is the engine's `openMicrophone` and nothing else (MODULES.md, "The microphone"): opened only by MIC ON
-  (never at install), closed on MIC ON again and in dispose(). It plays live: its `live()` node (contract 14) goes into the
+- The microphone is the engine's `openMicrophone` and nothing else (MODULES.md, "The microphone"): on by default: opened at the first
+  touch of the instrument (`micOnTouch`: a key or button, never at install), or by MIC ON; MIC ON off is kept for next time
+  (`micOn` in storage); closed in dispose(). It plays live: its `live()` node (contract 14) goes into the
   vocoder node's second input, nothing between. On an older container its blocks go to the node by port with their frame,
   read from a ring a little behind `currentFrame` (never by when they came), by the lateness of the last second or two.
 - ARRANGER (a button beside MIC ON, each page's own like the microphone) connects the arranger's Microphone track(s)
