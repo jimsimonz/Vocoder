@@ -18,11 +18,16 @@ live by the player's voice through the microphone (the modulator). Made from the
   imports only `@engine/core/voiceApi` and allocates nothing in render().
 - The vocoder is `src/vocoder-dsp.ts` (plain arithmetic, tested in node, allocates nothing once made) run by
   `src/vocoder.worklet.ts` (imported with `?worker&url`, one self-contained file that imports only `vocoder-dsp.ts`, loaded
-  once per audio context). Its processor is registered under a name with a number (`controllerist-vocoder-1`): change the
+  once per audio context). Its processor is registered under a name with a number (`controllerist-vocoder-2`): change the
   number when what it does changes, or a page with the old one loaded keeps it. Keep it near 1-2% of a desktop core (its test measures it).
 - The microphone is the engine's `openMicrophone` and nothing else (MODULES.md, "The microphone"): opened only by MIC ON
-  (never at install), closed on MIC ON again and in dispose(). Its blocks go to the node by port with their frame; the node
-  reads them from a ring a little behind `currentFrame` (never by when they came).
+  (never at install), closed on MIC ON again and in dispose(). It plays live: its `live()` node (contract 14) goes into the
+  vocoder node's second input, nothing between. On an older container its blocks go to the node by port with their frame,
+  read from a ring a little behind `currentFrame` (never by when they came), by the lateness of the last second or two.
+- ARRANGER (a button beside MIC ON, each page's own like the microphone) connects the arranger's Microphone track(s)
+  (`extraStrips()` with `microphone: true`, `channelSound`) to the same second input; it follows `onInstanceStrips`.
+- A gooseneck microphone stands on the back edge behind the MIC section (layout.ts `MIC_BOOM`): only to look at; its ring
+  lights while the microphone is open.
 - It looks like a vocoder keyboard of its own (a blue-grey panel, orange and teal headings, cream buttons with teal lights,
   orange memory buttons, wooden cheeks) under its own name and badging (VX-16): never a real product's name, logo, model
   number or panel artwork. Its 8 sounds (`src/presets.ts`) are our own.

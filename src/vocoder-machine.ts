@@ -24,7 +24,7 @@ import type { ModuleContext } from "@engine/api/module";
 import { createSequencerTrack, loadVoice, type SequencerTrack } from "@engine/api/module";
 import { playTogether } from "@engine/api/module";
 import { retempo, type ClockBeat } from "@engine/api/module";
-import { openMicrophone, type Microphone } from "@engine/api/module";
+import { channelSound, extraStrips, onInstanceStrips, openMicrophone, type Microphone } from "@engine/api/module";
 // Our carrier's voice, built as a file of its own for the audio thread (carrier.worklet.ts).
 import polyVoiceUrl from "./carrier.worklet.ts?worker&url";
 // The vocoder's processor, one self-contained file too (vocoder.worklet.ts).
@@ -43,6 +43,9 @@ export interface VocoderState {
   /** The microphone is open (MIC ON), and how loud it is (0..1, after its gain). */
   mic: boolean;
   micLevel: number;
+  /** The arranger's Microphone track is the voice too (ARRANGER), and how many such tracks it found. */
+  arranger: boolean;
+  arrangerTracks: number;
   /** This page may open the microphone (alone, or the room's host: the room hears the host's). */
   micAllowed: boolean;
   /** The sound last called from memory (1 to 8; 0: none) and its name. */
@@ -108,6 +111,7 @@ export function createVocoderMachine(context: ModuleContext) {
   const roleTimer = window.setInterval(() => {
     setOut();
     if (!heardHere() && mic) closeMic(); // (no longer the host)
+    if (!heardHere() && arrangerOn) { arrangerOn = false; untapArranger(); changed(); }
   }, 1000);
 
   /** The vocoder's processor, once per audio context. */
@@ -137,10 +141,21 @@ export function createVocoderMachine(context: ModuleContext) {
       const m = await openMicrophone(c, { echoCancellation: true });
       if (disposed) { m.close(); return; }
       mic = m;
-      stopListening = m.listen((frame, samples) => {
-        const copy = samples.slice(); // (shared with other listeners)
-        node?.port.postMessage({ type: "mic", frame, samples: copy }, [copy.buffer]);
-      });
+      // Live where the container has it (contract 14): the microphone's own node into the vocoder's
+      // second input, with nothing between. Else its blocks, by port, stamped with their frame.
+      const live = (m as { live?: () => AudioNode }).live;
+      if (typeof live === "function") {
+        const src = live.call(m);
+        src.connect(node, 0, 1);
+        console.log("[Vocoder] the microphone, live");
+        stopListening = () => { try { src.disconnect(); } catch { /* gone */ } };
+      } else {
+        console.log("[Vocoder] the microphone, in blocks (an older container: a little behind)");
+        stopListening = m.listen((frame, samples) => {
+          const copy = samples.slice(); // (shared with other listeners)
+          node?.port.postMessage({ type: "mic", frame, samples: copy }, [copy.buffer]);
+        });
+      }
     } catch (e) {
       console.warn("[Vocoder] no microphone:", e);
       problem = "The microphone isn't available here. Allow it for this site and press MIC ON again.";
@@ -152,6 +167,34 @@ export function createVocoderMachine(context: ModuleContext) {
   let problem = "";
   let disposed = false;
 
+  // ARRANGER: the arranger's Microphone track (what was sung, played back) into the vocoder's voice
+  // input, beside the live microphone. Followed as the arranger's tracks come and go.
+  let arrangerOn = false;
+  let arrangerTaps: AudioNode[] = [];
+  const untapArranger = () => {
+    for (const n of arrangerTaps) { try { n.disconnect(node!); } catch { /* gone */ } }
+    arrangerTaps = [];
+  };
+  const tapArranger = () => {
+    untapArranger();
+    if (!arrangerOn || !node) return;
+    for (const s of extraStrips().filter((x) => x.microphone)) {
+      const sound = channelSound(s.channel);
+      if (!sound || sound.context !== node.context) continue;
+      sound.connect(node, 0, 1);
+      arrangerTaps.push(sound);
+    }
+    changed();
+  };
+  const stopStrips = onInstanceStrips(() => { if (arrangerOn) tapArranger(); });
+  const setArranger = async (on: boolean) => {
+    arrangerOn = on;
+    if (on && !(await ensureAudio())) { arrangerOn = false; changed(); return; }
+    tapArranger();
+    if (on && !arrangerTaps.length) problem = "There's no Microphone track in the arranger yet. Record your voice on it, then play it back.";
+    changed();
+  };
+
   /** The container's audio context (the first call needs a user gesture), with our voice and track on it. */
   const ensureAudio = async (): Promise<AudioContext | null> => {
     const c = context.audio ? await context.audio.ensure() : (ctx ?? new AudioContext({ latencyHint: "interactive" }));
@@ -162,8 +205,9 @@ export function createVocoderMachine(context: ModuleContext) {
         seq?.dispose();
         await loadVoice(c, polyVoiceUrl); // once per context: our voice on the audio thread
         await loadVocoder(c);
+        untapArranger(); // (from the old node)
         node?.disconnect(); out?.disconnect();
-        node = new AudioWorkletNode(c, "controllerist-vocoder-1", { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: "explicit" });
+        node = new AudioWorkletNode(c, "controllerist-vocoder-2", { numberOfInputs: 2, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: "explicit" });
         node.port.onmessage = (e: MessageEvent<number>) => {
           const level = Math.min(1, e.data);
           if (Math.abs(level - micLevel) > 0.02) { micLevel = level; changed(); }
@@ -176,6 +220,7 @@ export function createVocoderMachine(context: ModuleContext) {
         made.onVoiceError((e) => console.warn(`[Vocoder] the voice was muted (${e.reason}): ${e.message}`));
         seq = made;
         sendParams();
+        if (arrangerOn) tapArranger();
       })().finally(() => { making = null; });
       await making.catch(() => { /* tried again on the next press */ });
     }
@@ -292,7 +337,7 @@ export function createVocoderMachine(context: ModuleContext) {
   const api = {
     state: (): VocoderState => ({
       arp: arpOn(), hold: holdOn(), arpRunning, notes: soundingKeys(),
-      mic: !!mic, micLevel, micAllowed: heardHere(),
+      mic: !!mic, micLevel, micAllowed: heardHere(), arranger: arrangerOn, arrangerTracks: arrangerTaps.length,
       preset: switches.preset, presetName: PRESETS[switches.preset - 1]?.name ?? "", canPlay: room.canPlay(),
     }),
     onChange(fn: () => void): () => void { listeners.add(fn); return () => { listeners.delete(fn); }; },
@@ -334,6 +379,7 @@ export function createVocoderMachine(context: ModuleContext) {
     lit: (buttonId: string): boolean => {
       const spec = buttonById(buttonId);
       if (spec?.kind === "mic") return !!mic; // its own: the microphone is open
+      if (spec?.kind === "arranger") return arrangerOn;
       return !!spec && buttonLit(spec, switches);
     },
     /**
@@ -347,6 +393,12 @@ export function createVocoderMachine(context: ModuleContext) {
         if (!heardHere()) return false;
         problem = "";
       if (mic) closeMic(); else void openMic();
+        return true;
+      }
+      if (spec?.kind === "arranger") {
+        if (!heardHere()) return false;
+        problem = "";
+        void setArranger(!arrangerOn);
         return true;
       }
       if (!spec || !room.canPlay()) return false;
@@ -385,6 +437,8 @@ export function createVocoderMachine(context: ModuleContext) {
       disposed = true;
       clearInterval(roleTimer);
       closeMic();
+      stopStrips();
+      untapArranger();
       clearTimeout(saveTimer);
       if (mine()) { try { localStorage.setItem(key, JSON.stringify({ sliders, switches })); } catch { /* not kept */ } }
       live.stop();

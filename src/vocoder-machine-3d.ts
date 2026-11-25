@@ -17,8 +17,8 @@
 import { createSystem } from "@iwsdk/core";
 import type { Material } from "three";
 import {
-  BoxGeometry, BufferAttribute, CanvasTexture, Color, CylinderGeometry, Group, InstancedMesh, Matrix4, Mesh,
-  MeshBasicMaterial, MeshStandardMaterial, Object3D, PlaneGeometry, Raycaster, RepeatWrapping, SRGBColorSpace, Vector2, Vector3,
+  BoxGeometry, BufferAttribute, CanvasTexture, CatmullRomCurve3, Color, CylinderGeometry, Group, InstancedMesh, Matrix4, Mesh,
+  MeshBasicMaterial, MeshStandardMaterial, Object3D, PlaneGeometry, Quaternion, Raycaster, RepeatWrapping, SphereGeometry, SRGBColorSpace, TorusGeometry, TubeGeometry, Vector2, Vector3,
   type BufferGeometry,
 } from "three";
 import type { ModuleContext } from "@engine/api/module";
@@ -33,7 +33,7 @@ import { PooledParts } from "./machine/pooled";
 import { drawFaceplate, drawWood } from "./machine/faceplate";
 import {
   BODY, BUTTON_PRESS_AT_M, BUTTON_TRAVEL_M, CHEEK, HANDLE, KEYS, LIGHT, LIGHTS, PRESS_AT_M, SLIDER, SLIDES, sliderValue, sliderZ, TRAVEL_M,
-  WHEEL, WHEELS, wheelValue, wheelZ, type KeySpec, type SlideSpec,
+  MIC_BOOM, micBoomX, WHEEL, WHEELS, wheelValue, wheelZ, type KeySpec, type SlideSpec,
 } from "./machine/layout";
 
 
@@ -156,6 +156,8 @@ export class VocoderMachine3DSystem extends createSystem({}) {
   private caps!: Caps;
   private sliderMesh!: PooledParts;
   private lights!: PooledParts;
+  /** The ring round the microphone's head: lit while the microphone is open. */
+  private micRing: MeshBasicMaterial | null = null;
   private wheelMesh!: PooledParts;
   private grab: GrabDetectionSystem | null = null;
   private grabKeys: number[] = [];
@@ -223,6 +225,7 @@ export class VocoderMachine3DSystem extends createSystem({}) {
     handle.scale.set(HANDLE.w, HANDLE.h, HANDLE.d);
     handle.position.set(HANDLE.x, HANDLE.y, HANDLE.z);
     this.root.add(handle);
+    this.buildMicBoom();
 
     // Key caps: rounded, worn plastic (see wear.ts), from the engine's shared instance pools. The
     // pool keeps the first copy's material (so: no onBeforeCompile, which would keep that copy's
@@ -577,6 +580,39 @@ export class VocoderMachine3DSystem extends createSystem({}) {
     for (let i = 0; i < this.slides.length; i++) this.sliderMesh.setColorAt(i, this.color);
     for (let i = 0; i < this.wheels.length; i++) this.wheelMesh.setColorAt(i, this.color);
     LIGHTS.forEach((l, i) => this.lights.setColorAt(i, this.color.set(m.lit(l.id) ? COLOR.lightOn : COLOR.lightOff)));
+    this.micRing?.color.set(m.lit("mic") ? COLOR.lightOn : COLOR.lightOff);
+  }
+
+  /** The microphone on its gooseneck (layout.ts MIC_BOOM): a socket, the neck, the head with its grille and ring. Four draw calls. */
+  private buildMicBoom() {
+    const x0 = micBoomX(), z0 = -BODY.depth / 2;
+    const points = MIC_BOOM.neck.map(([dx, y, dz]) => new Vector3(x0 + dx, y, z0 + dz));
+    const metal = this.own(new MeshStandardMaterial({ color: 0x2b2f36, roughness: 0.35, metalness: 0.8 }));
+    const socket = new Mesh(this.own(new CylinderGeometry(MIC_BOOM.socket.r * 0.8, MIC_BOOM.socket.r, MIC_BOOM.socket.h, 20)), metal);
+    socket.position.set(x0, MIC_BOOM.socket.h / 2, z0 + 0.006);
+    this.root.add(socket);
+    const curve = new CatmullRomCurve3(points);
+    const neck = new Mesh(this.own(new TubeGeometry(curve, 40, MIC_BOOM.neckR, 8, false)), metal);
+    this.root.add(neck);
+    // The head along the neck's end, its grille towards the player.
+    const end = points[points.length - 1], dir = curve.getTangent(1).normalize();
+    const head = new Group();
+    head.position.copy(end);
+    head.quaternion.copy(new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), dir));
+    this.root.add(head);
+    const H = MIC_BOOM.head;
+    const body = new Mesh(this.own(new CylinderGeometry(H.r, H.r * 0.8, H.len, 20)), metal);
+    body.position.y = H.len / 2;
+    head.add(body);
+    const grille = new Mesh(this.own(new SphereGeometry(H.grilleR, 20, 14)), this.own(new MeshStandardMaterial({ color: 0x15171b, roughness: 0.95, metalness: 0.1 })));
+    grille.position.y = H.len + H.grilleR * 0.45;
+    grille.scale.set(1, 0.85, 1);
+    head.add(grille);
+    this.micRing = this.own(new MeshBasicMaterial({ color: COLOR.lightOff }));
+    const ring = new Mesh(this.own(new TorusGeometry(H.r * 1.02, 0.0016, 8, 28)), this.micRing);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = H.len * 0.92;
+    head.add(ring);
   }
 
   // ------------------------------------------------------------------ where it is

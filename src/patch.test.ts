@@ -10,7 +10,7 @@ describe("the panel", () => {
     expect(new Set(SLIDERS.map((s) => s.id)).size).toBe(SLIDERS.length);
     expect(new Set(BUTTONS.map((b) => b.id)).size).toBe(BUTTONS.length);
     expect(new Set(BUTTONS.map((b) => `${b.section}/${b.col}/${b.row}`)).size).toBe(BUTTONS.length);
-    for (const b of BUTTONS) if (b.kind !== "mic") expect(switchById(b.sw), b.id).toBeDefined();
+    for (const b of BUTTONS) if (b.kind !== "mic" && b.kind !== "arranger") expect(switchById(b.sw), b.id).toBeDefined();
     for (const s of SLIDERS) if (s.steps) for (let i = 0; i < s.steps.length; i++) expect(stepOf(valueOfStep(i, s.steps.length), s.steps.length)).toBe(i);
   });
 

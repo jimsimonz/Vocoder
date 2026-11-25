@@ -57,15 +57,16 @@ export const SWITCHES: SwitchSpec[] = [
 /**
  * A button: what pressing it does to its switch. `set`: the switch becomes `value` (lit while it
  * is); `toggle`: on and off; `bit`: flips that bit (the chorus's I and II, together I+II);
- * `preset`: sound number `value` (1 to 8); `mic`: this player's microphone, on and off (not a
- * switch: each page's own, never the room's).
+ * `preset`: sound number `value` (1 to 8); `mic`: this player's microphone, on and off;
+ * `arranger`: the arranger's Microphone track (what was sung, played back) as the voice, on and
+ * off. Neither is a switch: each page's own, never the room's.
  */
 export interface ButtonSpec {
   id: string;
   section: string;
   label: string;
   sw: string;
-  kind: "set" | "toggle" | "bit" | "preset" | "mic";
+  kind: "set" | "toggle" | "bit" | "preset" | "mic" | "arranger";
   value: number;
   /** Its column within the section's buttons, and its place in that column (0 at the back). */
   col: number;
@@ -79,7 +80,8 @@ export const BUTTONS: ButtonSpec[] = [
   b("oct-up", "MASTER", "OCT UP", "octave", "set", 2, 0, 0),
   b("oct-normal", "MASTER", "NORMAL", "octave", "set", 1, 0, 1),
   b("oct-down", "MASTER", "OCT DOWN", "octave", "set", 0, 0, 2),
-  b("mic", "MIC", "MIC ON", "mic", "mic", 1, 0, 1),
+  b("mic", "MIC", "MIC ON", "mic", "mic", 1, 0, 0),
+  b("arranger", "MIC", "ARRANGER", "arranger", "arranger", 1, 0, 1),
   b("arp", "ARPEGGIO", "ON", "arp", "toggle", 1, 0, 0),
   b("hold", "ARPEGGIO", "HOLD", "hold", "toggle", 1, 0, 2),
   b("arp-up", "ARPEGGIO", "UP", "arpMode", "set", 0, 1, 0),
@@ -111,7 +113,7 @@ export function buttonLit(button: ButtonSpec, switches: Record<string, number>):
     case "toggle": return v === 1;
     case "bit": return (v & button.value) !== 0;
     case "preset": return v === button.value;
-    case "mic": return false; // (the machine's own: its microphone)
+    case "mic": case "arranger": return false; // (the machine's own: where its voice comes from)
   }
 }
 
@@ -123,7 +125,7 @@ export function pressButton(button: ButtonSpec, switches: Record<string, number>
     case "toggle": return { ...switches, [button.sw]: v ? 0 : 1 };
     case "bit": return { ...switches, [button.sw]: v ^ button.value };
     case "preset": return { ...switches, preset: button.value };
-    case "mic": return switches;
+    case "mic": case "arranger": return switches;
   }
 }
 

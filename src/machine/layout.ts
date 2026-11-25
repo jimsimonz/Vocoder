@@ -179,6 +179,20 @@ export const WHEEL = { z: 0.095, travel: 0.03, slot: 0.075, capW: 0.024, capH: 0
 export const wheelZ = (v: number): number => WHEEL.z + WHEEL.travel * Math.max(-1, Math.min(1, v));
 export const wheelValue = (z: number): number => Math.max(-1, Math.min(1, (z - WHEEL.z) / WHEEL.travel));
 
+/**
+ * The microphone on its gooseneck, as vocoder keyboards have one: from a socket on the back edge
+ * behind the MIC section, up and over towards the player, so it is plain where the voice goes in.
+ * Only to look at (nothing to press or hold). Points of its neck (y up, z towards the player), from
+ * the socket to the head, as offsets from the MIC section's middle (x) and the back edge (z).
+ */
+export const MIC_BOOM = {
+  socket: { r: 0.009, h: 0.012 },
+  neck: [[0, 0.006, 0.006], [0, 0.07, 0.0], [0.004, 0.15, 0.012], [0.01, 0.205, 0.055], [0.014, 0.222, 0.105]] as const,
+  neckR: 0.0034,
+  head: { r: 0.0115, len: 0.036, grilleR: 0.0128 },
+};
+export const micBoomX = (): number => { const s = built.sections.find((x) => x.name === "MIC")!; return (s.x0 + s.x1) / 2; };
+
 /** The wooden cheeks at either end, and the carry handle along the back. */
 export const CHEEK = { w: 0.026, extra: 0.035 };
 export const HANDLE = { x: 0, z: -BODY.depth / 2 - 0.009, w: 0.5, d: 0.02, h: 0.014, y: -0.014 };

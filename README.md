@@ -31,7 +31,7 @@ browser.
 | | |
 |---|---|
 | Keyboard | Five octaves and a C (C2 to C7). A key sounds while it is held down; six notes at once. With the microphone off there is nothing to hear (the vocoder needs a voice), unless MIX SYNTH is up. |
-| MIC | MIC ON opens the microphone (the browser asks the first time) and lights while it is open; press again to close it. GAIN: 0 to +30 dB before the vocoder. Echo cancelling is on, so what the speakers play isn't taken for your voice. |
+| MIC | MIC ON opens the microphone (the browser asks the first time) and lights while it is open, with the ring on the gooseneck microphone; press again to close it. It is live: the engine's `Microphone.live()` straight into the vocoder, only the device's own input latency. ARRANGER takes the arranger's Microphone track (what you sang, played back) as the voice as well (mute that track's own strip on the mixer to hear only the vocoder). GAIN: 0 to +30 dB before the vocoder. Echo cancelling is on, so what the speakers play isn't taken for your voice. |
 | CARRIER | The synth your voice shapes: SAW and PULSE (either or both), RANGE 16', 8', 4', PWM, SUB, NOISE (helps consonants), BRIGHT. |
 | ENV | A and R of every note (it holds while the key is down). |
 | VOCODER | 16 bands from 100 Hz to 8 kHz. FORMANT moves the carrier's bands an octave either way against the voice's (down: bigger and deeper; up: smaller and higher). RESP: how fast the bands follow the voice (crisp to smooth). Q: the bands' sharpness. SIBIL: the voice's own s, t and f sounds (above 6 kHz), let through while keys sound. |
@@ -48,15 +48,17 @@ browser.
 ```
 keys -> the carrier (src/carrier.worklet.ts, on the engine's sequencer track) --.
                                                                                  +-> the vocoder (src/vocoder.worklet.ts) -> its channel
-microphone (the engine's openMicrophone) ------ blocks with their frame, by port -'
+microphone (the engine's openMicrophone, live()) ---------- its second input ---'
+the arranger's Microphone track (ARRANGER: channelSound) --'
 ```
 
 - The carrier is the Poly Sixty's voice on the engine's audio sequencer; its track plays into the
   vocoder's node (`destination`) instead of the channel.
-- The microphone is the engine's `openMicrophone` (MODULES.md, "The microphone"): its blocks come a
-  little behind live, stamped with their frame on the container's context. The node writes them into
-  a ring where their frames say and reads a little behind `currentFrame`, just far enough that every
-  block has come; late blocks push that out at once, and it comes back in slowly.
+- The microphone is the engine's `openMicrophone` (MODULES.md, "The microphone"), its `live()` node
+  into the vocoder node's second input (contract 14): as live as the device allows. (An older
+  container's blocks, stamped with their frame, go to a ring read a little behind `currentFrame`.)
+- ARRANGER connects the arranger's Microphone track(s) to the same input (`extraStrips()` with
+  `microphone`, `channelSound`), following the arranger's tracks as they come and go.
 - The vocoder (`src/vocoder-dsp.ts`, plain arithmetic, tested in node): the voice through 16
   band-passes (4-pole), an envelope each; the carrier through 16 band-passes (2-pole, at the same
   centres moved by FORMANT), each times its envelope, summed; a soft limit on the output. About 1.3%
