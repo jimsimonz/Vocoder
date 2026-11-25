@@ -8,7 +8,7 @@
  * Every step can be done with one finger (or the mouse, which holds one key at a time).
  */
 import { anyOf, isTrue, valueMoved, type Begin, type Lesson, type LessonTarget } from "@engine/api/module";
-import type { VocoderMachine } from "./vocoder-machine";
+import { HEARD, type VocoderMachine } from "./vocoder-machine";
 
 /** Where the machine's things are in the world (vocoder-machine-3d.ts), or null while it isn't built. */
 export interface LessonBody {
@@ -35,8 +35,6 @@ export const LINES = {
   wellDone: "That's your voice on the keys! Try a chord, press HOLD to keep it, or try the eight sounds under MEMORY.",
 } as const;
 
-/** The microphone counts as heard above this (its level after GAIN, 0..1). */
-const HEARD = 0.03;
 
 export function vocoderLesson(machine: VocoderMachine, body: () => LessonBody | null | undefined, clips?: string): Lesson {
   const key = (id: string): LessonTarget => (out) => !!body()?.keyWorldPosition(id, out);

@@ -57,6 +57,9 @@ export interface VocoderState {
 
 export type VocoderMachine = ReturnType<typeof createVocoderMachine>;
 
+/** The microphone counts as heard above this level (after GAIN, 0..1): the lesson's "you spoke". */
+export const HEARD = 0.03;
+
 export function createVocoderMachine(context: ModuleContext) {
   const key = context.storageKey("panel");
   const panel = (() => { try { return decodePanel(JSON.parse(localStorage.getItem(key) ?? "null")); } catch { return decodePanel(null); } })();
@@ -108,7 +111,10 @@ export function createVocoderMachine(context: ModuleContext) {
   /** A guest's copy is silent (the host's stream is the sound); alone or hosting it plays. */
   const heardHere = () => room.role() !== "audience";
   const setOut = () => { if (out && ctx) out.gain.setTargetAtTime(heardHere() ? 1 : 0, ctx.currentTime, 0.02); };
+  let shownRole = room.role();
   const roleTimer = window.setInterval(() => {
+    if (room.role() === shownRole) return; // (nothing to do while it stays the same)
+    shownRole = room.role();
     setOut();
     if (!heardHere() && mic) closeMic(); // (no longer the host)
     if (!heardHere() && arrangerOn) { arrangerOn = false; untapArranger(); changed(); }
@@ -220,9 +226,12 @@ export function createVocoderMachine(context: ModuleContext) {
         untapArranger(); // (from the old node)
         node?.disconnect(); out?.disconnect();
         node = new AudioWorkletNode(c, "controllerist-vocoder-2", { numberOfInputs: 2, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: "explicit" });
+        // The microphone's level, ten times a second: kept, and told only when the voice comes or
+        // goes (a change redraws the machine's lights: not ten times a second on the game's thread).
         node.port.onmessage = (e: MessageEvent<number>) => {
-          const level = Math.min(1, e.data);
-          if (Math.abs(level - micLevel) > 0.02) { micLevel = level; changed(); }
+          const level = Math.min(1, e.data), was = micLevel > HEARD;
+          micLevel = level;
+          if ((level > HEARD) !== was) changed();
         };
         out = c.createGain();
         out.gain.value = heardHere() ? 1 : 0;
