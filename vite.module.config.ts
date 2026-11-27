@@ -10,7 +10,7 @@ export default defineConfig({
   plugins: [
     aliveEngine({ publicFiles: false }),
     // thumbnail: its picture on its card in the container's browser (Controllerist: Instruments).
-    moduleBuild({ id: "vocoder", name: "Vocoder", entry: "src/vocoder-module.ts", outDir: "dist/module", thumbnail: "thumbnail.jpg", again: "another" }),
+    moduleBuild({ miniature: "miniature.glb", id: "vocoder", name: "Vocoder", entry: "src/vocoder-module.ts", outDir: "dist/module", thumbnail: "thumbnail.jpg", again: "another" }),
   ],
   publicDir: false,
 });
