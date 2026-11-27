@@ -1,0 +1,22 @@
+{
+  "id": "vocoder",
+  "name": "Vocoder",
+  "entry": "vocoder.js",
+  "contract": 17,
+  "thumbnail": "vocoder-thumbnail.jpg",
+  "miniature": "vocoder-miniature.glb",
+  "author": {
+    "name": "AliveIn Tech Ltd"
+  },
+  "again": "another",
+  "shared": [
+    "@engine/api/iwsdk/module",
+    "@engine/api/module",
+    "@iwsdk/core",
+    "three"
+  ],
+  "files": [
+    "assets/carrier.worklet-DA2wlBLo.js",
+    "assets/vocoder.worklet-Dx-xs3gL.js"
+  ]
+}
